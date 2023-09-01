@@ -14,7 +14,6 @@
 /******************************************************************************/
 /***************************** Include Files **********************************/
 /******************************************************************************/
-
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -143,6 +142,10 @@ static const char* mclk_division_str[] = {
 /* Flag to indicate if size of the buffer is updated according to requested
  * number of samples for the multi-channel IIO buffer data alignment */
 static volatile bool buf_size_updated = false;
+
+signal_t signal_cn549;            // Wrapper for raw input buffer
+static ei_impulse_result_t result; // Used to store inference output
+EI_IMPULSE_ERROR res;       // Return code from inference
 
 /******************************************************************************/
 /************************ Functions Prototypes ********************************/
@@ -763,13 +766,9 @@ static int32_t iio_ad77681_submit_buffer(struct iio_device_data *iio_dev_data)
 	uint32_t nb_of_samples;
 	uint32_t adc_raw;
 
-    signal_t signal;            // Wrapper for raw input buffer
-    ei_impulse_result_t result; // Used to store inference output
-    EI_IMPULSE_ERROR res;       // Return code from inference
-
     // Assign callback function to fill buffer used for preprocessing/inference
-    signal.total_length = EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE;
-    signal.get_data = &get_signal_data;
+    signal_cn549.total_length = EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE;
+    signal_cn549.get_data = &get_signal_data;
 
 #if (DATA_CAPTURE_MODE == BURST_DATA_CAPTURE)
 	nb_of_samples = iio_dev_data->buffer->size / BYTES_PER_SAMPLE;
@@ -792,7 +791,8 @@ static int32_t iio_ad77681_submit_buffer(struct iio_device_data *iio_dev_data)
 		return ret;
 	}
 
-	while (sample_index < nb_of_samples) {
+	//while (sample_index < nb_of_samples) {
+    while (sample_index < EI_CLASSIFIER_RAW_SAMPLE_COUNT) {
 		// ret = ad77681_read_single_sample(&adc_raw);
 		// if (ret) {
 		// 	return ret;
@@ -821,12 +821,25 @@ static int32_t iio_ad77681_submit_buffer(struct iio_device_data *iio_dev_data)
 	}
 #endif
 
-    // Perform DSP pre-processing and inference
-    res = run_classifier(&signal, &result, false);
-
 	ret = no_os_irq_disable(trigger_irq_desc, TRIGGER_INT_ID);
 	if (ret) {
 		return ret;
+	}
+    
+    // Perform DSP pre-processing and inference
+    res = run_classifier(&signal_cn549, &result, false);
+    uint32_t inference_result[2];
+    volatile float percentage;
+
+    //result.classification[1].value = result.classification[1].value * 100.0;
+    percentage = result.classification[0].value * 100.0;
+    inference_result[0] = (uint32_t) (percentage);
+    percentage = result.classification[1].value * 100.0;
+    inference_result[1] = (uint32_t) (percentage);
+
+    ret = no_os_cb_write(iio_dev_data->buffer->buf, &inference_result, BYTES_PER_SAMPLE*2);
+	if (ret) {
+        return ret;
 	}
 
 	return 0;
@@ -1158,12 +1171,10 @@ int32_t ad77681_iio_initialize(void)
 		return init_status;
 	}
 	
-//	init_status = ltc26x6_write_code(device_dac, write_update_command, 0xef9b); // for dac offset. 
-//	if (init_status) {
-//		return init_status;
-//	}
-	
-	init_status = ltc26x6_write_code(device_dac, write_update_command, 0xefaa); // for DAC offset. for shorter cables.   
+    // The DAC offset might vary with cable length. 
+    // Please use the code to calculate the DAC offset.
+    // https://os.mbed.com/teams/AnalogDevices/code/EVAL-CN0540-ARDZ/
+	init_status = ltc26x6_write_code(device_dac, write_update_command, 0xef2a); 
 	if (init_status) {
 		return init_status;
 	}
