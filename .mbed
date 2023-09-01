@@ -1,0 +1,5 @@
+ROOT=.
+DEVICE_ID[/home/studio/workspace/pcg_cn549_ei]=19001301f302151202f3021500000000000000002e127069
+DEVICE_TYPE[/home/studio/workspace/pcg_cn549_ei]=connected
+TARGET=CY8CKIT_062_WIFI_BT
+TARGET_CODE=1900
