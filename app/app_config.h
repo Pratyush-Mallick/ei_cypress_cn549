@@ -36,6 +36,10 @@
 #define BURST_DATA_CAPTURE			0
 #define CONTINUOUS_DATA_CAPTURE		1
 
+/* Enable only one at a time */
+#define INFERENCE_MODE        1
+//#define DATA_LOGGING_MODE   1
+
 /* Macros for stringification */
 #define XSTR(s)		#s
 #define STR(s)		XSTR(s)

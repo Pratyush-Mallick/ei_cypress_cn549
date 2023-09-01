@@ -143,6 +143,7 @@ static const char* mclk_division_str[] = {
  * number of samples for the multi-channel IIO buffer data alignment */
 static volatile bool buf_size_updated = false;
 
+/* EI model variables */
 signal_t signal_cn549;            // Wrapper for raw input buffer
 static ei_impulse_result_t result; // Used to store inference output
 EI_IMPULSE_ERROR res;       // Return code from inference
@@ -150,7 +151,6 @@ EI_IMPULSE_ERROR res;       // Return code from inference
 /******************************************************************************/
 /************************ Functions Prototypes ********************************/
 /******************************************************************************/
-
 // Callback: fill a section of the out_ptr buffer when requested
 static int get_signal_data(size_t offset, size_t length, float *out_ptr) 
 {
@@ -766,9 +766,11 @@ static int32_t iio_ad77681_submit_buffer(struct iio_device_data *iio_dev_data)
 	uint32_t nb_of_samples;
 	uint32_t adc_raw;
 
+#if defined INFERENCE_MODE
     // Assign callback function to fill buffer used for preprocessing/inference
     signal_cn549.total_length = EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE;
     signal_cn549.get_data = &get_signal_data;
+#endif
 
 #if (DATA_CAPTURE_MODE == BURST_DATA_CAPTURE)
 	nb_of_samples = iio_dev_data->buffer->size / BYTES_PER_SAMPLE;
@@ -791,13 +793,11 @@ static int32_t iio_ad77681_submit_buffer(struct iio_device_data *iio_dev_data)
 		return ret;
 	}
 
-	//while (sample_index < nb_of_samples) {
+#if defined INFERENCE_MODE    
     while (sample_index < EI_CLASSIFIER_RAW_SAMPLE_COUNT) {
-		// ret = ad77681_read_single_sample(&adc_raw);
-		// if (ret) {
-		// 	return ret;
-		// }
-
+#else
+	while (sample_index < nb_of_samples) {
+#endif
 		while (data_ready != true && timeout > 0) {
 			timeout--;
 		}
@@ -825,7 +825,8 @@ static int32_t iio_ad77681_submit_buffer(struct iio_device_data *iio_dev_data)
 	if (ret) {
 		return ret;
 	}
-    
+
+#if defined INFERENCE_MODE
     // Perform DSP pre-processing and inference
     res = run_classifier(&signal_cn549, &result, false);
     uint32_t inference_result[2];
@@ -841,6 +842,7 @@ static int32_t iio_ad77681_submit_buffer(struct iio_device_data *iio_dev_data)
 	if (ret) {
         return ret;
 	}
+#endif
 
 	return 0;
 }
